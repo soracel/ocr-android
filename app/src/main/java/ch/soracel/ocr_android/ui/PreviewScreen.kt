@@ -33,52 +33,47 @@ import java.util.concurrent.Executors
 @OptIn(TransformExperimental::class)
 @Composable
 fun PreviewScreen(viewModel: OcrViewModel) {
-    // Change this regex to match your specific formats
-    val licencePlateRegex =
-        Regex("\\b([A-Z]{1,3}-?[A-Z]{1,2} ?\\d{1,4}|[A-Z]{2} ?\\d{2,4} ?[A-Z]{1,2}|[A-Z]{2}-?[A-Z]{1,2} ?\\d{1,3}|[A-Z]{2} ?\\d{1,6}|[A-Z]{1,3}-\\d{1,5}[A-Z]{1,2}|FL ?\\d{1,5})\\b")
-
+    val exampleRegexLicencePlate = Regex(
+        "\\b([A-Z]{2})[·:.\\s\\r\\n]?(\\d{1,6})\\b"
+    )
     val lifecycleOwner = LocalLifecycleOwner.current
-    val transformedRecognitions by viewModel.transformedRecognitions.collectAsState()
+    val plates by viewModel.transformedRecognitions.collectAsState()
     val executor = remember { Executors.newSingleThreadExecutor() }
 
-    var previewViewRef: PreviewView? by remember { mutableStateOf(null) }
-
     Box(Modifier.fillMaxSize()) {
-        // Camera Preview
+        var previewViewRef: PreviewView? by remember { mutableStateOf(null) }
+
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                    previewViewRef = this
+                PreviewView(ctx).also { previewView ->
+                    previewViewRef = previewView
 
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                     cameraProviderFuture.addListener({
                         val cameraProvider = cameraProviderFuture.get()
 
                         val preview = Preview.Builder().build().apply {
-                            setSurfaceProvider(surfaceProvider)
+                            surfaceProvider = previewView.surfaceProvider
                         }
 
                         val analyzer = ImageAnalyzer(
-                            regex = licencePlateRegex
-                        ) { results, imageProxy ->
-                            previewViewRef?.let { pv ->
-                                viewModel.setRawRecognitions(imageProxy, results, pv)
-                            } ?: imageProxy.close()
+                            regex = exampleRegexLicencePlate
+                        ) { recognitions, imageProxy ->
+                            viewModel.setRawRecognitions(recognitions, imageProxy, previewView)
                         }
 
                         val imageAnalysis = ImageAnalysis.Builder()
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build().apply {
-                                setAnalyzer(executor, analyzer)
+                            .build().also {
+                                it.setAnalyzer(executor, analyzer)
                             }
 
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            cameraSelector,
                             preview,
                             imageAnalysis
                         )
@@ -87,24 +82,25 @@ fun PreviewScreen(viewModel: OcrViewModel) {
             }
         )
 
-        // Bounding Boxes Overlay
+        // Bounding Box Overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
-            transformedRecognitions.forEach { recognition ->
+            plates.forEach { plate ->
                 drawRect(
                     color = Color.Red,
-                    topLeft = Offset(recognition.rect.left, recognition.rect.top),
-                    size = Size(recognition.rect.width(), recognition.rect.height()),
+                    topLeft = Offset(plate.rect.left, plate.rect.top),
+                    size = Size(plate.rect.width(), plate.rect.height()),
                     style = Stroke(width = 3f)
                 )
+
                 drawContext.canvas.nativeCanvas.drawText(
-                    recognition.text,
-                    recognition.rect.left,
-                    recognition.rect.top - 8f,
+                    plate.text,
+                    plate.rect.left,
+                    plate.rect.top - 10f,
                     Paint().apply {
                         color = android.graphics.Color.RED
                         textSize = 36f
-                        isAntiAlias = true
                         style = Paint.Style.FILL
+                        isAntiAlias = true
                     }
                 )
             }

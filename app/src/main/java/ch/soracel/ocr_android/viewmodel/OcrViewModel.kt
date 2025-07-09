@@ -15,11 +15,15 @@ import kotlinx.coroutines.flow.StateFlow
 @TransformExperimental
 class OcrViewModel : ViewModel() {
     private val _rawRecognitions = MutableStateFlow<List<RawRecognition>>(emptyList())
-    private val _transformedRecognitions = MutableStateFlow<List<TransformedRecognition>>(emptyList())
-
+    private val _transformedRecognitions =
+        MutableStateFlow<List<TransformedRecognition>>(emptyList())
     val transformedRecognitions: StateFlow<List<TransformedRecognition>> = _transformedRecognitions
 
-    fun setRawRecognitions(imageProxy: ImageProxy, recognitions: List<RawRecognition>, previewView: PreviewView) {
+    fun setRawRecognitions(
+        recognitions: List<RawRecognition>,
+        imageProxy: ImageProxy,
+        previewView: PreviewView,
+    ) {
         _rawRecognitions.value = recognitions
 
         val transformFactory = ImageProxyTransformFactory().apply {
